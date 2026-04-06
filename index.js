@@ -113,14 +113,14 @@ function fuzzySearch(notes, query) {
 // Express middleware
 // ════════════════════════════════════════════════
 
-// 全域 log（必須最先，確認任何 request 都有進來）
+// 全域 log（最先執行，確認任何 request 都有進來）
 app.use((req, res, next) => {
   console.log('🌍 GLOBAL HIT:', req.method, req.url);
   next();
 });
 
-// raw body（LINE webhook signature 驗證必要）
-app.use(express.raw({ type: '*/*' }));
+// /api 以外的一般路由才用 json
+app.use('/api', express.json());
 
 // ════════════════════════════════════════════════
 // Routes
@@ -131,17 +131,18 @@ app.get('/', (req, res) => {
   res.send('OK');
 });
 
-app.post('/webhook', (req, res) => {
+// webhook 直接掛 route-level raw middleware，確保 req.body 一定是 Buffer
+app.post('/webhook', express.raw({ type: '*/*' }), (req, res) => {
   console.log('🔥 WEBHOOK HIT');
 
   try {
     const rawBody = req.body;
     const signature = req.headers['x-line-signature'];
 
-    console.log('rawBody type:', typeof rawBody, Buffer.isBuffer(rawBody));
+    console.log('isBuffer:', Buffer.isBuffer(rawBody));
 
-    if (!rawBody) {
-      console.log('❌ rawBody 不存在');
+    if (!Buffer.isBuffer(rawBody)) {
+      console.log('❌ rawBody 不是 Buffer');
       return res.status(200).send('OK');
     }
 
