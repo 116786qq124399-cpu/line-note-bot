@@ -1,0 +1,12 @@
+const fs = require('fs');
+
+const json = {
+  "type": "service_account",
+  "project_id": "line-note-bot",
+  "private_key": `-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC8jvL6916+AHHp\niUghYWyPAv0s1eh7VeDzVDSa7G5tsJbLboT9t2AeqAh5rKx64qI7GGYLvXOjYcr7\nX1ijIB04XIqDKB4VWAKQo+cHJrtm8c7ZRmYgpKtW3JuLS0K6ifBvHDJFyfMzqSao\nIl6qVA/SGpZ1Telsd39b9Pzyfktt3+De7uLl/TdXtDgEEoojJUmS5aqlKlkVfwF5\nRrHmx0I6mo9jAgLl3P65w0nzMcGUgcR+TPvz6s9QXp32yKlBugrj+mME3KmPfKzN\nXLV1itMfd+waSjeuBSFZUezW68jr4+bPtdQVrq1Tn8YK/YiKTvX65IBVuyKnp+kI\n5Yy+dV7fAgMBAAECggEALmquK9ObUgCACjJOPFFkTOw6cMATo9DnOF9BN+X95Si0\nZk3FlUN/+Ov6ciFssC98Kjn+XON9RPn84tZ81mNAbjBxtIm6phxtPTfr1lnVhij+\nd4QZ/e0rdI2ICMk1GwB73I4/Xeix4sTADGGxlhJtdpYu9Z+BV78u7e8oGXW3kcs/\ns/e89dSgQPgaPSOWlris9sRRx+o2TzPQjSHkelO/VwrsiECip9lhbtc9QCqV/Y7A\niQ+b8nEtOArKnOIe0JYA8JniOQ5RUwmdIQfZoKoWtfiHvECQhbHELYVQ4wbjLMMb\nRC1TjgjTrScfTUrqNJPS1fRAEnZSlhcQzS9pztYTkQKBgQDiHK/xuSfZrYwrPlNQ\niv9poPdwB/z1xyIp80loAH+YjZX/WLQ02D17w1Nu4nuqNKokH0267A+WMnTG5x2Q\n59Wzqq/XKKePWyrQCSptNXh9sroXV1AMPxjnLroz8NoLRjxIbKQjYjXdhv8wMQ9X\nx8AvgWskmSxqDnrsdh/kERasFwKBgQDVe3+3gF6jsm8WixnqXCmPqUw9Hg7euLl7\n1p/AnwNCvirDj6ggp6NlEEqQcnIL4jPp8ERoNUz0g/4kDvFQ9RGm0w5MRxYbHnx7\nPyibrTN116QdE3SYeYiwTL+0EcH8C8cBXh/tnOrUHaMZ5iU6n0RAjSIdeYY/K0tw\ncC0edk84eQKBgQCCx/j0JRXpj7mtIWVrBppobBPyFoy3U7Bs9yyUHQWwJOSHRrUk\ng5Y8SWOulQzWC5QFRJ3e6b6yLwjgKrktIQq32pfOKNOR1TdUEJkbhXvlqER+T6Ab\nFTvAK4TDmiFjuAISGdRuKtXhBb4AD8BCE2UTlRV1m6rWxP1QW5pifYfRjQKBgQC/\ngtLII3jDEUdmydKt04/VOOMT0Os2EjETTy5w9jVOoppqZW1GHh0OhNbfTkvRLVO1\nAb3cXjRzBhXu8xi4r6DuL1gcRYknOuohBj+/qFkJ1jF7hACM6DofLjqrp2KGYWpd\nZ7rsxmBDeXLfwP6U4FuyLOn11xb/hC9g5sETGr9mwQKBgDj+D+y45N1mckGUrAEo\n08QkOnVeBGyMXb7gwi79sm1HfoRgdWlfTtPr0yEUY9f5C4MdotnWJAppS8ZlI6PZ\nt4BtpT4T7wkRB0ezIfkJ22i+Vkk1pvn+//SEmzRsQ+e/U0uq0akcOlbnmQx27Qs4\nTxgk3UMQrEQ6Cu9iw3fFqx2C\n-----END PRIVATE KEY-----\n`,
+  "client_email": "firebase-adminsdk-fbsvc@line-note-bot.iam.gserviceaccount.com",
+};
+
+const base64 = Buffer.from(JSON.stringify(json)).toString('base64');
+
+console.log(base64);
