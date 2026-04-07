@@ -186,12 +186,19 @@ app.post('/webhook', express.raw({ type: '*/*' }), (req, res) => {
 // ════════════════════════════════════════════════
 // 事件處理
 // ════════════════════════════════════════════════
+
+// webhook → handleEvent → handleUserMessage
 async function handleEvent(event) {
   if (event.type !== 'message' || event.message.type !== 'text') return;
 
   const userId = event.source.userId;
   const replyToken = event.replyToken;
   const text = event.message.text.trim();
+
+  await handleUserMessage(userId, text, replyToken);
+}
+
+async function handleUserMessage(userId, text, replyToken) {
   const reply = (msg) => replyMessage(replyToken, msg);
 
   // ════════════════════════════════════════════════
