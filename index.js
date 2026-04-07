@@ -241,7 +241,7 @@ async function handleUserMessage(userId, text, replyToken) {
   // ════════════════════════════════════════════════
   // 管理員指令
   // ════════════════════════════════════════════════
-  if (text === '/invite') {
+  if (text === '新增邀請碼') {
     if (!isAdmin) {
       await reply('這功能目前只有管理員能用 😏');
       return;
@@ -260,7 +260,7 @@ async function handleUserMessage(userId, text, replyToken) {
     }
     const available = Object.keys(data.inviteCodes);
     if (available.length === 0) {
-      await reply('目前沒有邀請碼，輸入「/invite」來產生一個吧！');
+      await reply('目前沒有邀請碼，輸入「新增邀請碼」來產生一個吧！');
     } else {
       await reply(`目前可用的邀請碼（共 ${available.length} 組）：\n\n${available.join('\n')}`);
     }
@@ -317,6 +317,26 @@ async function handleUserMessage(userId, text, replyToken) {
     } else {
       resetState(userId);
       await reply('好的，我幫你保留著 😌');
+    }
+    return;
+  }
+
+  // 指令：功能介紹
+  if (text === '功能介紹') {
+    await reply(
+      '📒 記事本使用方式\n\n➕ 新增\n👉 輸入「新增」開始記錄\n\n📦 工具箱\n👉 查看所有記事\n\n❌ 刪除\n👉 輸入「刪除 關鍵字」\n\n🔍 搜尋\n👉 直接輸入關鍵字即可查詢'
+    );
+    return;
+  }
+
+  // 指令：查詢紀錄（同工具箱邏輯）
+  if (text === '查詢紀錄') {
+    const keys = Object.keys(notes);
+    if (keys.length === 0) {
+      await reply('你的記事本還是空的耶 📭\n\n輸入「新增」，把第一件事記下來吧！');
+    } else {
+      const list = keys.map((k, i) => `${NUMBER_EMOJI[i] ?? `${i + 1}.`} ${k}`).join('\n');
+      await reply(`這是你目前存的所有記事 🗂️（共 ${keys.length} 則）\n\n${list}\n\n直接輸入關鍵字就能查看內容 👆`);
     }
     return;
   }
