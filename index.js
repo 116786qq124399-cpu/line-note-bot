@@ -110,6 +110,37 @@ function fuzzySearch(notes, query) {
 }
 
 // ════════════════════════════════════════════════
+// 分頁搜尋系統
+// searchState[userId] = { keyword, results, page }
+// ════════════════════════════════════════════════
+const searchState = {};
+
+function paginate(results, page = 1, pageSize = 10) {
+  const start = (page - 1) * pageSize;
+  return results.slice(start, start + pageSize);
+}
+
+function buildSearchPage(results, page, notes) {
+  const PAGE_SIZE = 10;
+  const total = results.length;
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const pageItems = paginate(results, page, PAGE_SIZE);
+
+  const list = pageItems
+    .map((k, i) => {
+      const cat = getNoteCategory(notes[k]);
+      return `${NUMBER_EMOJI[i] ?? `${i + 1}.`} ${k}　${CATEGORY_EMOJI[cat] ?? '📌'}`;
+    })
+    .join('\n');
+
+  let msg = `🔍 找到 ${total} 筆結果（第 ${page} 頁）\n\n${list}`;
+  if (page < totalPages) {
+    msg += '\n\n➡️ 輸入「下一頁」查看更多';
+  }
+  return msg;
+}
+
+// ════════════════════════════════════════════════
 // 自動分類（關鍵字權重，不使用外部 API）
 // weight 3 = 強烈特徵詞，weight 2 = 中等，weight 1 = 輔助
 // ════════════════════════════════════════════════
@@ -487,6 +518,44 @@ async function handleUserMessage(userId, text, replyToken) {
     }
     userState[userId] = { step: 'confirm_delete', tempContent: '', deleteKey: keyword, results: [] };
     await reply(`確定要刪掉「${keyword}」嗎？⚠️\n\n內容是：${getNoteContent(notes[keyword])}\n\n刪了就找不回來喔，確認的話回覆「確認」。`);
+    return;
+  }
+
+  // 指令：找 xxx（進階搜尋，支援分頁）
+  if (text.startsWith('找 ') || text.startsWith('找　')) {
+    const keyword = text.slice(2).trim().toLowerCase();
+    if (!keyword) {
+      await reply('請輸入要搜尋的關鍵字，例如：找 工作');
+      return;
+    }
+    const results = Object.keys(notes).filter((k) => {
+      const keyMatch = k.toLowerCase().includes(keyword);
+      const contentMatch = getNoteContent(notes[k]).toLowerCase().includes(keyword);
+      return keyMatch || contentMatch;
+    });
+    if (results.length === 0) {
+      await reply(`❌ 沒找到包含「${keyword}」的紀錄`);
+      return;
+    }
+    searchState[userId] = { keyword, results, page: 1 };
+    await reply(buildSearchPage(results, 1, notes));
+    return;
+  }
+
+  // 指令：下一頁
+  if (text === '下一頁') {
+    const ss = searchState[userId];
+    if (!ss || !ss.results) {
+      await reply('❌ 沒有查詢紀錄，請先輸入「找 關鍵字」');
+      return;
+    }
+    const totalPages = Math.ceil(ss.results.length / 10);
+    if (ss.page >= totalPages) {
+      await reply('❌ 已經沒有更多資料了');
+      return;
+    }
+    ss.page += 1;
+    await reply(buildSearchPage(ss.results, ss.page, notes));
     return;
   }
 
