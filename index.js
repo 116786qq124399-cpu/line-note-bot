@@ -110,6 +110,56 @@ function fuzzySearch(notes, query) {
 }
 
 // ════════════════════════════════════════════════
+// 自動分類（關鍵字權重，不使用外部 API）
+// ════════════════════════════════════════════════
+function classify(text) {
+  const rules = [
+    {
+      category: '工作',
+      keywords: ['會議', '報告', '專案', '客戶', '工作', '辦公', '業務', '簡報', '進度', '截止', '提案', '合約', '上班', '下班', '同事', '主管', '老闆', '開會'],
+    },
+    {
+      category: '靈感',
+      keywords: ['想法', '靈感', '創意', '點子', '概念', '設計', '發現', '突然', '如果', '試試', '嘗試', '構想'],
+    },
+    {
+      category: '日記',
+      keywords: ['今天', '昨天', '明天', '早上', '下午', '晚上', '心情', '感覺', '覺得', '開心', '難過', '生氣', '好累', '好棒', '日記', '回憶', '感謝'],
+    },
+    {
+      category: '待辦',
+      keywords: ['記得', '別忘', '提醒', '待辦', '要買', '繳費', '繳款', '預約', '回覆', '確認', '安排', '需要', '必須'],
+    },
+  ];
+
+  let best = { category: '其他', score: 0 };
+  for (const rule of rules) {
+    let score = 0;
+    for (const kw of rule.keywords) {
+      if (text.includes(kw)) score++;
+    }
+    if (score > best.score) {
+      best = { category: rule.category, score };
+    }
+  }
+  return best.category;
+}
+
+const CATEGORY_EMOJI = { '工作': '💼', '靈感': '💡', '日記': '📖', '待辦': '✅', '其他': '📌' };
+
+// 相容舊資料（舊筆記存的是純字串，新的是 { content, category }）
+function getNoteContent(note) {
+  if (!note) return '';
+  if (typeof note === 'string') return note;
+  return note.content || '';
+}
+
+function getNoteCategory(note) {
+  if (!note || typeof note === 'string') return '其他';
+  return note.category || '其他';
+}
+
+// ════════════════════════════════════════════════
 // Express middleware
 // ════════════════════════════════════════════════
 
@@ -280,7 +330,8 @@ async function handleUserMessage(userId, text, replyToken) {
     if (!isNaN(num) && num >= 1 && num <= state.results.length) {
       const keyword = state.results[num - 1];
       resetState(userId);
-      await reply(`📋 ${keyword}\n${'─'.repeat(16)}\n${notes[keyword]}`);
+      const cat1 = getNoteCategory(notes[keyword]);
+      await reply(`📋 ${keyword}　${CATEGORY_EMOJI[cat1] ?? '📌'}${cat1}\n${'─'.repeat(16)}\n${getNoteContent(notes[keyword])}`);
     } else {
       resetState(userId);
       await reply('好的，我先關掉選單囉 😊\n\n有需要隨時再搜尋就好！');
@@ -299,10 +350,12 @@ async function handleUserMessage(userId, text, replyToken) {
   // 狀態：等待關鍵字
   if (state.step === 'waiting_keyword') {
     const keyword = text;
-    notes[keyword] = state.tempContent;
+    const category = classify(state.tempContent);
+    notes[keyword] = { content: state.tempContent, category };
     await saveData();
     resetState(userId);
-    await reply(`存好了 ✅\n\n🔑 ${keyword}\n📝 ${notes[keyword]}\n\n下次輸入「${keyword}」我就把它找出來給你！`);
+    const catEmoji = CATEGORY_EMOJI[category] ?? '📌';
+    await reply(`存好了 ✅\n\n🔑 ${keyword}\n📝 ${state.tempContent}\n${catEmoji} 分類：${category}\n\n下次輸入「${keyword}」我就把它找出來給你！`);
     return;
   }
 
@@ -376,7 +429,7 @@ async function handleUserMessage(userId, text, replyToken) {
       return;
     }
     userState[userId] = { step: 'confirm_delete', tempContent: '', deleteKey: keyword, results: [] };
-    await reply(`確定要刪掉「${keyword}」嗎？⚠️\n\n內容是：${notes[keyword]}\n\n刪了就找不回來喔，確認的話回覆「確認」。`);
+    await reply(`確定要刪掉「${keyword}」嗎？⚠️\n\n內容是：${getNoteContent(notes[keyword])}\n\n刪了就找不回來喔，確認的話回覆「確認」。`);
     return;
   }
 
@@ -389,7 +442,8 @@ async function handleUserMessage(userId, text, replyToken) {
     await reply('我這邊還沒有這個紀錄 🥺\n\n要不要新增一個？輸入「新增」就可以囉～');
   } else if (matched.length === 1) {
     const keyword = matched[0];
-    await reply(`📋 ${keyword}\n${'─'.repeat(16)}\n${notes[keyword]}`);
+    const cat2 = getNoteCategory(notes[keyword]);
+    await reply(`📋 ${keyword}　${CATEGORY_EMOJI[cat2] ?? '📌'}${cat2}\n${'─'.repeat(16)}\n${getNoteContent(notes[keyword])}`);
   } else {
     const list = matched
       .slice(0, 10)
