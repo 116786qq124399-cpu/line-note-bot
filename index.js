@@ -168,6 +168,42 @@ function classify(text) {
 
 const CATEGORY_EMOJI = { '工作': '💼', '靈感': '💡', '日記': '📖', '待辦': '✅', '其他': '📌' };
 
+// ════════════════════════════════════════════════
+// 根據分類回傳不同風格的結尾句
+// ════════════════════════════════════════════════
+function smartReply(category) {
+  const replies = {
+    工作: [
+      '已歸檔，隨時可以調閱 📁',
+      '記錄完成，專注繼續衝 💪',
+      '存好了，不怕忘記重要細節 🗂️',
+    ],
+    靈感: [
+      '靈感捕捉成功！記得去實現它 🚀',
+      '好點子就該立刻記下來，做得好 💡',
+      '這個想法很有潛力，繼續發揮 ✨',
+    ],
+    日記: [
+      '今天也辛苦了，好好休息 🌙',
+      '謝謝你願意把這些告訴我 🤍',
+      '每一天都值得被記住 📖',
+    ],
+    待辦: [
+      '清單更新完畢，一件一件搞定它 ✅',
+      '記住了！完成後記得來刪掉它 💨',
+      '效率第一，放心去做吧 ⚡',
+    ],
+    其他: [
+      '記好了，需要的時候來找我 😊',
+      '收到，隨時幫你找出來 🔍',
+      '存進去了，放心吧 👌',
+    ],
+  };
+
+  const list = replies[category] ?? replies['其他'];
+  return list[Math.floor(Math.random() * list.length)];
+}
+
 // 相容舊資料（舊筆記存的是純字串，新的是 { content, category }）
 function getNoteContent(note) {
   if (!note) return '';
@@ -376,7 +412,7 @@ async function handleUserMessage(userId, text, replyToken) {
     await saveData();
     resetState(userId);
     const catEmoji = CATEGORY_EMOJI[category] ?? '📌';
-    await reply(`存好了 ✅\n\n🔑 ${keyword}\n📝 ${state.tempContent}\n${catEmoji} 分類：${category}\n\n下次輸入「${keyword}」我就把它找出來給你！`);
+    await reply(`存好了 ✅\n\n🔑 ${keyword}\n📝 ${state.tempContent}\n${catEmoji} 分類：${category}\n\n${smartReply(category)}`);
     return;
   }
 
