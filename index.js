@@ -67,6 +67,24 @@ function generateCode() {
 // }
 const userState = {};
 
+// ════════════════════════════════════════════════
+// 模式系統（userMode）
+// userMode[userId] = 'note' | 'search' | 'category' | null
+// ════════════════════════════════════════════════
+const userMode = {};
+
+function setMode(userId, mode) {
+  userMode[userId] = mode;
+}
+
+function clearMode(userId) {
+  userMode[userId] = null;
+}
+
+function getMode(userId) {
+  return userMode[userId] || null;
+}
+
 const NUMBER_EMOJI = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
 
 function verifySignature(rawBody, signature) {
@@ -325,6 +343,130 @@ app.post('/webhook', express.raw({ type: '*/*' }), (req, res) => {
 // 事件處理
 // ════════════════════════════════════════════════
 
+// ════════════════════════════════════════════════
+// 模式處理函數
+// ════════════════════════════════════════════════
+
+// ── 模式 note：新增 / 刪除記事流程 ──
+async function handleNoteMode(userId, text, reply, state, notes) {
+  if (state.step === 'waiting_content') {
+    userState[userId].tempContent = text;
+    userState[userId].step = 'waiting_keyword';
+    await reply('收到 ✍️\n\n幫這則記事取個關鍵字吧，之後用關鍵字就能快速找到它～');
+    return;
+  }
+
+  if (state.step === 'waiting_keyword') {
+    const keyword = text;
+    const category = classify(state.tempContent);
+    notes[keyword] = { content: state.tempContent, category };
+    await saveData();
+    resetState(userId);
+    clearMode(userId);
+    const catEmoji = CATEGORY_EMOJI[category] ?? '📌';
+    await reply(`存好了 ✅\n\n🔑 ${keyword}\n📝 ${state.tempContent}\n${catEmoji} 分類：${category}\n\n${smartReply(category)}`);
+    return;
+  }
+
+  if (state.step === 'confirm_delete') {
+    if (text === '確認') {
+      const key = state.deleteKey;
+      delete notes[key];
+      await saveData();
+      resetState(userId);
+      clearMode(userId);
+      await reply(`好，「${key}」已經刪掉了 🗑️`);
+    } else {
+      resetState(userId);
+      clearMode(userId);
+      await reply('好的，我幫你保留著 😌');
+    }
+    return;
+  }
+}
+
+// ── 模式 search：進階搜尋 + 分頁 ──
+async function handleSearchMode(userId, text, reply, notes) {
+  const state = userState[userId];
+
+  // 從模糊搜尋結果選擇數字
+  if (state.step === 'choosing') {
+    const num = parseInt(text, 10);
+    if (!isNaN(num) && num >= 1 && num <= state.results.length) {
+      const keyword = state.results[num - 1];
+      resetState(userId);
+      clearMode(userId);
+      const cat = getNoteCategory(notes[keyword]);
+      await reply(`📋 ${keyword}　${CATEGORY_EMOJI[cat] ?? '📌'}${cat}\n${'─'.repeat(16)}\n${getNoteContent(notes[keyword])}`);
+    } else {
+      resetState(userId);
+      clearMode(userId);
+      await reply('好的，我先關掉選單囉 😊\n\n有需要隨時再搜尋就好！');
+    }
+    return;
+  }
+
+  // 下一頁
+  if (text === '下一頁') {
+    const ss = searchState[userId];
+    if (!ss || !ss.results) {
+      await reply('❌ 沒有查詢紀錄，請先輸入「找 關鍵字」');
+      return;
+    }
+    const totalPages = Math.ceil(ss.results.length / 10);
+    if (ss.page >= totalPages) {
+      clearMode(userId);
+      await reply('❌ 已經沒有更多資料了');
+      return;
+    }
+    ss.page += 1;
+    await reply(buildSearchPage(ss.results, ss.page, notes));
+    return;
+  }
+
+  // 找 xxx
+  if (text.startsWith('找 ') || text.startsWith('找　')) {
+    const keyword = text.slice(2).trim().toLowerCase();
+    if (!keyword) {
+      await reply('請輸入要搜尋的關鍵字，例如：找 工作');
+      return;
+    }
+    const results = Object.keys(notes).filter((k) => {
+      const keyMatch = k.toLowerCase().includes(keyword);
+      const contentMatch = getNoteContent(notes[k]).toLowerCase().includes(keyword);
+      return keyMatch || contentMatch;
+    });
+    if (results.length === 0) {
+      clearMode(userId);
+      await reply(`❌ 沒找到包含「${keyword}」的紀錄`);
+      return;
+    }
+    searchState[userId] = { keyword, results, page: 1 };
+    await reply(buildSearchPage(results, 1, notes));
+    return;
+  }
+}
+
+// ── 模式 category：依分類瀏覽筆記 ──
+async function handleCategoryMode(userId, text, reply, notes) {
+  const validCategories = ['工作', '靈感', '日記', '待辦', '其他'];
+  clearMode(userId);
+
+  if (!validCategories.includes(text)) {
+    await reply('請輸入分類名稱：\n\n💼 工作\n💡 靈感\n📖 日記\n✅ 待辦\n📌 其他');
+    return;
+  }
+
+  const filtered = Object.keys(notes).filter((k) => getNoteCategory(notes[k]) === text);
+  if (filtered.length === 0) {
+    await reply(`${CATEGORY_EMOJI[text] ?? '📌'} 你還沒有「${text}」分類的記事`);
+    return;
+  }
+
+  const list = filtered.map((k, i) => `${NUMBER_EMOJI[i] ?? `${i + 1}.`} ${k}`).join('\n');
+  await reply(`${CATEGORY_EMOJI[text] ?? '📌'} ${text}（共 ${filtered.length} 則）\n\n${list}\n\n直接輸入關鍵字就能查看內容 👆`);
+}
+
 // webhook → handleEvent → handleUserMessage
 async function handleEvent(event) {
   if (event.type !== 'message' || event.message.type !== 'text') return;
@@ -350,7 +492,6 @@ async function handleUserMessage(userId, text, replyToken) {
 
   const isAdmin = (userId === data.admin);
 
-  // 輸入密碼升級為 admin
   if (text === '197909') {
     if (!isAdmin) {
       data.admin = userId;
@@ -377,13 +518,10 @@ async function handleUserMessage(userId, text, replyToken) {
   }
 
   // ════════════════════════════════════════════════
-  // 管理員指令
+  // 管理員指令（任何模式下都有效）
   // ════════════════════════════════════════════════
   if (text === '新增邀請碼') {
-    if (!isAdmin) {
-      await reply('這功能目前只有管理員能用 😏');
-      return;
-    }
+    if (!isAdmin) { await reply('這功能目前只有管理員能用 😏'); return; }
     const code = generateCode();
     data.inviteCodes[code] = true;
     await saveData();
@@ -392,10 +530,7 @@ async function handleUserMessage(userId, text, replyToken) {
   }
 
   if (text === '查看邀請碼') {
-    if (!isAdmin) {
-      await reply('這功能目前只有管理員能用 😏');
-      return;
-    }
+    if (!isAdmin) { await reply('這功能目前只有管理員能用 😏'); return; }
     const available = Object.keys(data.inviteCodes);
     if (available.length === 0) {
       await reply('目前沒有邀請碼，輸入「新增邀請碼」來產生一個吧！');
@@ -406,99 +541,24 @@ async function handleUserMessage(userId, text, replyToken) {
   }
 
   // ════════════════════════════════════════════════
-  // 一般使用者功能（已解鎖 或 admin）
+  // 初始化使用者
   // ════════════════════════════════════════════════
   initUser(userId);
   const state = userState[userId];
   const notes = data.notesByUser[userId];
 
-  // 狀態：從模糊搜尋結果選擇
-  if (state.step === 'choosing') {
-    const num = parseInt(text, 10);
-    if (!isNaN(num) && num >= 1 && num <= state.results.length) {
-      const keyword = state.results[num - 1];
-      resetState(userId);
-      const cat1 = getNoteCategory(notes[keyword]);
-      await reply(`📋 ${keyword}　${CATEGORY_EMOJI[cat1] ?? '📌'}${cat1}\n${'─'.repeat(16)}\n${getNoteContent(notes[keyword])}`);
-    } else {
-      resetState(userId);
-      await reply('好的，我先關掉選單囉 😊\n\n有需要隨時再搜尋就好！');
-    }
-    return;
-  }
-
-  // 狀態：等待記事內容
-  if (state.step === 'waiting_content') {
-    userState[userId].tempContent = text;
-    userState[userId].step = 'waiting_keyword';
-    await reply('收到 ✍️\n\n幫這則記事取個關鍵字吧，之後用關鍵字就能快速找到它～');
-    return;
-  }
-
-  // 狀態：等待關鍵字
-  if (state.step === 'waiting_keyword') {
-    const keyword = text;
-    const category = classify(state.tempContent);
-    notes[keyword] = { content: state.tempContent, category };
-    await saveData();
-    resetState(userId);
-    const catEmoji = CATEGORY_EMOJI[category] ?? '📌';
-    await reply(`存好了 ✅\n\n🔑 ${keyword}\n📝 ${state.tempContent}\n${catEmoji} 分類：${category}\n\n${smartReply(category)}`);
-    return;
-  }
-
-  // 狀態：確認刪除
-  if (state.step === 'confirm_delete') {
-    if (text === '確認') {
-      const key = state.deleteKey;
-      delete notes[key];
-      await saveData();
-      resetState(userId);
-      await reply(`好，「${key}」已經刪掉了 🗑️`);
-    } else {
-      resetState(userId);
-      await reply('好的，我幫你保留著 😌');
-    }
-    return;
-  }
-
-  // 指令：功能介紹
+  // ── 全域指令（任何模式下都優先處理）──
   if (text === '功能介紹') {
-    await reply(
-      '📒 記事本使用方式\n\n➕ 新增\n👉 輸入「新增」開始記錄\n\n📦 工具箱\n👉 查看所有記事\n\n❌ 刪除\n👉 輸入「刪除 關鍵字」\n\n🔍 搜尋\n👉 直接輸入關鍵字即可查詢'
-    );
+    await reply('📒 記事本使用方式\n\n➕ 新增\n👉 輸入「新增」開始記錄\n\n📦 工具箱\n👉 查看所有記事\n\n❌ 刪除\n👉 輸入「刪除 關鍵字」\n\n🔍 搜尋\n👉 直接輸入關鍵字即可查詢');
     return;
   }
 
-  // 指令：查詢紀錄（同工具箱邏輯）
-  if (text === '查詢紀錄') {
-    const keys = Object.keys(notes);
-    if (keys.length === 0) {
-      await reply('你的記事本還是空的耶 📭\n\n輸入「新增」，把第一件事記下來吧！');
-    } else {
-      const list = keys.map((k, i) => `${NUMBER_EMOJI[i] ?? `${i + 1}.`} ${k}`).join('\n');
-      await reply(`這是你目前存的所有記事 🗂️（共 ${keys.length} 則）\n\n${list}\n\n直接輸入關鍵字就能查看內容 👆`);
-    }
-    return;
-  }
-
-  // 指令：幫助
   if (text === '幫助') {
-    await reply(
-      '這是你的私人記事本 🧠\n\n你可以這樣用：\n\n📝 新增記事\n→ 輸入「新增」\n\n🔍 查詢記事\n→ 直接輸入關鍵字，或輸入部分字串模糊搜尋\n\n🗂️ 看所有記事\n→ 輸入「工具箱」\n\n🗑️ 刪除記事\n→ 輸入「刪除 關鍵字」'
-    );
+    await reply('這是你的私人記事本 🧠\n\n你可以這樣用：\n\n📝 新增記事\n→ 輸入「新增」\n\n🔍 查詢記事\n→ 直接輸入關鍵字，或輸入部分字串模糊搜尋\n\n🗂️ 看所有記事\n→ 輸入「工具箱」\n\n🗑️ 刪除記事\n→ 輸入「刪除 關鍵字」');
     return;
   }
 
-  // 指令：新增
-  if (text === '新增') {
-    userState[userId].step = 'waiting_content';
-    await reply('好！說吧，你想記什麼？📝');
-    return;
-  }
-
-  // 指令：工具箱
-  if (text === '工具箱') {
+  if (text === '工具箱' || text === '查詢紀錄') {
     const keys = Object.keys(notes);
     if (keys.length === 0) {
       await reply('你的記事本還是空的耶 📭\n\n輸入「新增」，把第一件事記下來吧！');
@@ -509,7 +569,7 @@ async function handleUserMessage(userId, text, replyToken) {
     return;
   }
 
-  // 指令：刪除（格式：「刪除 關鍵字」）
+  // ── 刪除指令（不受模式影響）──
   if (text.startsWith('刪除 ') || text.startsWith('刪除　')) {
     const keyword = text.slice(3).trim();
     if (notes[keyword] === undefined) {
@@ -521,46 +581,50 @@ async function handleUserMessage(userId, text, replyToken) {
     return;
   }
 
-  // 指令：找 xxx（進階搜尋，支援分頁）
-  if (text.startsWith('找 ') || text.startsWith('找　')) {
-    const keyword = text.slice(2).trim().toLowerCase();
-    if (!keyword) {
-      await reply('請輸入要搜尋的關鍵字，例如：找 工作');
-      return;
-    }
-    const results = Object.keys(notes).filter((k) => {
-      const keyMatch = k.toLowerCase().includes(keyword);
-      const contentMatch = getNoteContent(notes[k]).toLowerCase().includes(keyword);
-      return keyMatch || contentMatch;
-    });
-    if (results.length === 0) {
-      await reply(`❌ 沒找到包含「${keyword}」的紀錄`);
-      return;
-    }
-    searchState[userId] = { keyword, results, page: 1 };
-    await reply(buildSearchPage(results, 1, notes));
+  // ════════════════════════════════════════════════
+  // 模式入口指令
+  // ════════════════════════════════════════════════
+  if (text === '新增') {
+    setMode(userId, 'note');
+    userState[userId].step = 'waiting_content';
+    await reply('好！說吧，你想記什麼？📝');
     return;
   }
 
-  // 指令：下一頁
-  if (text === '下一頁') {
-    const ss = searchState[userId];
-    if (!ss || !ss.results) {
-      await reply('❌ 沒有查詢紀錄，請先輸入「找 關鍵字」');
-      return;
-    }
-    const totalPages = Math.ceil(ss.results.length / 10);
-    if (ss.page >= totalPages) {
-      await reply('❌ 已經沒有更多資料了');
-      return;
-    }
-    ss.page += 1;
-    await reply(buildSearchPage(ss.results, ss.page, notes));
+  if (text === '分類瀏覽') {
+    setMode(userId, 'category');
+    await reply('📂 分類瀏覽模式\n\n請輸入分類名稱：\n\n💼 工作\n💡 靈感\n📖 日記\n✅ 待辦\n📌 其他');
     return;
+  }
+
+  if (text.startsWith('找 ') || text.startsWith('找　')) {
+    setMode(userId, 'search');
+    return handleSearchMode(userId, text, reply, notes);
+  }
+
+  if (text === '下一頁') {
+    return handleSearchMode(userId, text, reply, notes);
   }
 
   // ════════════════════════════════════════════════
-  // 模糊搜尋（預設模式下的查詢入口）
+  // 模式路由
+  // ════════════════════════════════════════════════
+  const mode = getMode(userId);
+
+  if (mode === 'note' || state.step === 'waiting_content' || state.step === 'waiting_keyword' || state.step === 'confirm_delete') {
+    return handleNoteMode(userId, text, reply, state, notes);
+  }
+
+  if (mode === 'search' || state.step === 'choosing') {
+    return handleSearchMode(userId, text, reply, notes);
+  }
+
+  if (mode === 'category') {
+    return handleCategoryMode(userId, text, reply, notes);
+  }
+
+  // ════════════════════════════════════════════════
+  // 預設：模糊搜尋
   // ════════════════════════════════════════════════
   const matched = fuzzySearch(notes, text);
 
