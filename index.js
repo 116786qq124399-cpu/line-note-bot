@@ -69,7 +69,7 @@ const userState = {};
 
 // ════════════════════════════════════════════════
 // 模式系統（userMode）
-// userMode[userId] = 'add' | 'search' | 'category' | null
+// userMode[userId] = 'add' | 'search' | 'category' | 'category_select' | null
 // ════════════════════════════════════════════════
 const userMode = {};
 
@@ -152,6 +152,24 @@ function buildSearchPage(results, page, notes) {
     .join('\n');
 
   let msg = `🔍 找到 ${total} 筆結果（第 ${page} 頁）\n\n${list}`;
+  if (page < totalPages) {
+    msg += '\n\n➡️ 輸入「下一頁」查看更多';
+  }
+  return msg;
+}
+
+function buildCategoryPage(category, results, page, notes) {
+  const PAGE_SIZE = 10;
+  const total = results.length;
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const pageItems = paginate(results, page, PAGE_SIZE);
+  const catEmoji = CATEGORY_EMOJI[category] ?? '📌';
+
+  const list = pageItems
+    .map((k, i) => `${NUMBER_EMOJI[i] ?? `${i + 1}.`} ${k}`)
+    .join('\n');
+
+  let msg = `${catEmoji} ${category}（共 ${total} 筆，第 ${page} 頁）\n\n${list}`;
   if (page < totalPages) {
     msg += '\n\n➡️ 輸入「下一頁」查看更多';
   }
@@ -443,7 +461,10 @@ async function handleSearchMode(userId, text, reply, notes) {
       return;
     }
     ss.page += 1;
-    await reply(buildSearchPage(ss.results, ss.page, notes));
+    const display = ss.category
+      ? buildCategoryPage(ss.category, ss.results, ss.page, notes)
+      : buildSearchPage(ss.results, ss.page, notes);
+    await reply(display);
     return;
   }
 
@@ -613,6 +634,12 @@ async function handleUserMessage(userId, text, replyToken) {
     return;
   }
 
+  if (text === '紀錄') {
+    setMode(userId, 'category_select');
+    await reply('📂 請選擇分類：\n\n1️⃣ 工作\n2️⃣ 靈感\n3️⃣ 日記\n4️⃣ 待辦\n5️⃣ 其他\n\n👉 請輸入數字（1~5）');
+    return;
+  }
+
   if (text === '新增') {
     setMode(userId, 'add');
     await reply('請輸入要記錄的內容 📝');
@@ -639,6 +666,24 @@ async function handleUserMessage(userId, text, replyToken) {
   // 模式路由
   // ════════════════════════════════════════════════
   const mode = getMode(userId);
+
+  if (mode === 'category_select') {
+    const CATEGORY_MAP = { '1': '工作', '2': '靈感', '3': '日記', '4': '待辦', '5': '其他' };
+    const selected = CATEGORY_MAP[text];
+    if (!selected) {
+      await reply('請輸入 1~5');
+      return;
+    }
+    const results = Object.keys(notes).filter((k) => getNoteCategory(notes[k]) === selected);
+    clearMode(userId);
+    if (results.length === 0) {
+      await reply('❌ 此分類目前沒有紀錄');
+      return;
+    }
+    searchState[userId] = { keyword: selected, results, page: 1, category: selected };
+    await reply(buildCategoryPage(selected, results, 1, notes));
+    return;
+  }
 
   if (mode === 'add') {
     const category = classify(text);
