@@ -214,6 +214,22 @@ function classify(text) {
         { w: 1, list: ['去', '買', '打電話', '傳訊息', '確認', '查', '處理', '弄', '辦', '寄'] },
       ],
     },
+    {
+      category: '運動',
+      keywords: [
+        { w: 3, list: ['健身', '跑步', '訓練', '重訓', '有氧', '瑜伽'] },
+        { w: 2, list: ['運動', '鍛鍊', '體能', '游泳', '騎車', '爬山', '球賽', '比賽'] },
+        { w: 1, list: ['流汗', '肌肉', '體重', '卡路里', '伸展', '熱身', '休息日', '健走'] },
+      ],
+    },
+    {
+      category: '美食',
+      keywords: [
+        { w: 3, list: ['餐廳', '美食', '食記', '推薦店', '必吃'] },
+        { w: 2, list: ['好吃', '料理', '食物', '菜單', '點餐', '外送', '下午茶', '咖啡'] },
+        { w: 1, list: ['吃', '喝', '甜點', '早餐', '午餐', '晚餐', '宵夜', '飲料', '口味', '食材'] },
+      ],
+    },
   ];
 
   let best = { category: '其他', score: 0 };
@@ -233,7 +249,7 @@ function classify(text) {
   return best.category;
 }
 
-const CATEGORY_EMOJI = { '工作': '💼', '靈感': '💡', '日記': '📖', '待辦': '✅', '其他': '📌' };
+const CATEGORY_EMOJI = { '工作': '💼', '靈感': '💡', '日記': '📖', '待辦': '✅', '運動': '🏃', '美食': '🍜', '其他': '📌' };
 
 // ════════════════════════════════════════════════
 // 根據分類回傳不同風格的結尾句
@@ -259,6 +275,16 @@ function smartReply(category) {
       '清單更新完畢，一件一件搞定它 ✅',
       '記住了！完成後記得來刪掉它 💨',
       '效率第一，放心去做吧 ⚡',
+    ],
+    運動: [
+      '運動紀錄存好了，繼續保持 🏃',
+      '身體是革命的本錢，加油 💪',
+      '每一次流汗都算數 🔥',
+    ],
+    美食: [
+      '美食情報收錄完畢，下次去吃 🍜',
+      '好店就要記下來，不然忘了可惜 😋',
+      '這個記錄，未來的你會感謝現在的你 🍽️',
     ],
     其他: [
       '記好了，需要的時候來找我 😊',
@@ -493,11 +519,11 @@ async function handleSearchMode(userId, text, reply, notes) {
 
 // ── 模式 category：依分類瀏覽筆記 ──
 async function handleCategoryMode(userId, text, reply, notes) {
-  const validCategories = ['工作', '靈感', '日記', '待辦', '其他'];
+  const validCategories = ['工作', '待辦', '日記', '靈感', '運動', '美食', '其他'];
   clearMode(userId);
 
   if (!validCategories.includes(text)) {
-    await reply('請輸入分類名稱：\n\n💼 工作\n💡 靈感\n📖 日記\n✅ 待辦\n📌 其他');
+    await reply('請輸入分類名稱：\n\n💼 工作\n✅ 待辦\n📖 日記\n💡 靈感\n🏃 運動\n🍜 美食\n📌 其他');
     return;
   }
 
@@ -630,13 +656,13 @@ async function handleUserMessage(userId, text, replyToken) {
   // ════════════════════════════════════════════════
   if (text === '分類瀏覽') {
     setMode(userId, 'category');
-    await reply('📂 分類瀏覽模式\n\n請輸入分類名稱：\n\n💼 工作\n💡 靈感\n📖 日記\n✅ 待辦\n📌 其他');
+    await reply('📂 分類瀏覽模式\n\n請輸入分類名稱：\n\n💼 工作\n✅ 待辦\n📖 日記\n💡 靈感\n🏃 運動\n🍜 美食\n📌 其他');
     return;
   }
 
   if (text === '紀錄') {
     setMode(userId, 'category_select');
-    await reply('📂 請選擇分類：\n\n1️⃣ 工作\n2️⃣ 靈感\n3️⃣ 日記\n4️⃣ 待辦\n5️⃣ 其他\n\n👉 請輸入數字（1~5）');
+    await reply('📂 請選擇分類：\n\n1️⃣ 工作\n2️⃣ 待辦\n3️⃣ 日記\n4️⃣ 靈感\n5️⃣ 運動\n6️⃣ 美食\n7️⃣ 其他\n\n👉 請輸入數字（1~7）');
     return;
   }
 
@@ -668,10 +694,10 @@ async function handleUserMessage(userId, text, replyToken) {
   const mode = getMode(userId);
 
   if (mode === 'category_select') {
-    const CATEGORY_MAP = { '1': '工作', '2': '靈感', '3': '日記', '4': '待辦', '5': '其他' };
+    const CATEGORY_MAP = { '1': '工作', '2': '待辦', '3': '日記', '4': '靈感', '5': '運動', '6': '美食', '7': '其他' };
     const selected = CATEGORY_MAP[text];
     if (!selected) {
-      await reply('請輸入 1~5');
+      await reply('請輸入 1~7');
       return;
     }
     const results = Object.keys(notes).filter((k) => getNoteCategory(notes[k]) === selected);
