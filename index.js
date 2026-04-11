@@ -72,7 +72,7 @@ const tempData = {};
 
 // ════════════════════════════════════════════════
 // 模式系統（userMode）
-// userMode[userId] = 'add_step_1' | 'add_step_2' | 'search' | 'category' | 'category_select' | null
+// userMode[userId] = 'add_step_1' | 'add_step_2' | 'category' | 'category_select' | null
 // ════════════════════════════════════════════════
 const userMode = {};
 
@@ -667,18 +667,6 @@ async function handleUserMessage(userId, text, replyToken) {
     return;
   }
 
-  if (text === '搜尋') {
-    setMode(userId, 'search');
-    userState[userId].step = 'waiting_search_keyword';
-    await reply('請輸入關鍵字');
-    return;
-  }
-
-  if (text.startsWith('找 ') || text.startsWith('找　')) {
-    setMode(userId, 'search');
-    return handleSearchMode(userId, text, reply, notes);
-  }
-
   if (text === '下一頁') {
     return handleSearchMode(userId, text, reply, notes);
   }
@@ -744,18 +732,31 @@ async function handleUserMessage(userId, text, replyToken) {
     return handleNoteMode(userId, text, reply, state, notes);
   }
 
-  if (mode === 'search' || state.step === 'choosing' || state.step === 'waiting_search_keyword') {
-    return handleSearchMode(userId, text, reply, notes);
-  }
-
   if (mode === 'category') {
     return handleCategoryMode(userId, text, reply, notes);
   }
 
   // ════════════════════════════════════════════════
-  // 預設：不儲存，提示使用方式
+  // 預設：自動搜尋
   // ════════════════════════════════════════════════
-  await reply('輸入「新增」來記錄 📝\n輸入「搜尋」來查找 🔍\n輸入「工具箱」看所有記事 🗂️');
+  const keyword = text.toLowerCase();
+  const results = Object.keys(notes).filter((k) => {
+    const note = notes[k];
+    return (
+      k.toLowerCase().includes(keyword) ||
+      getNoteContent(note).toLowerCase().includes(keyword) ||
+      getNoteCategory(note).toLowerCase().includes(keyword) ||
+      (typeof note === 'object' && note?.keyword?.toLowerCase().includes(keyword))
+    );
+  });
+
+  if (results.length === 0) {
+    await reply('❌ 沒找到相關紀錄');
+    return;
+  }
+
+  searchState[userId] = { keyword, results, page: 1 };
+  await reply(buildSearchPage(results, 1, notes));
 }
 
 // ════════════════════════════════════════════════
