@@ -72,7 +72,7 @@ const tempData = {};
 
 // ════════════════════════════════════════════════
 // 模式系統（userMode）
-// userMode[userId] = 'add_step_1' | 'add_step_2' | 'category' | 'category_select' | null
+// userMode[userId] = 'add_step_1' | 'add_step_2' | 'category' | 'category_select' | 'result_select' | null
 // ════════════════════════════════════════════════
 const userMode = {};
 
@@ -674,14 +674,58 @@ async function handleUserMessage(userId, text, replyToken) {
     return;
   }
 
-  if (text === '下一頁') {
-    return handleSearchMode(userId, text, reply, notes);
-  }
-
   // ════════════════════════════════════════════════
   // 模式路由
   // ════════════════════════════════════════════════
   const mode = getMode(userId);
+
+  // ── 搜尋結果選擇模式（嚴格攔截，只允許數字或下一頁）──
+  if (mode === 'result_select') {
+    const ss = searchState[userId];
+    const PAGE_SIZE = 10;
+
+    // 下一頁
+    if (text === '下一頁') {
+      if (!ss || !ss.results) {
+        clearMode(userId);
+        await reply('❌ 沒有查詢紀錄');
+        return;
+      }
+      const totalPages = Math.ceil(ss.results.length / PAGE_SIZE);
+      if (ss.page >= totalPages) {
+        clearMode(userId);
+        await reply('❌ 已經沒有更多資料了');
+        return;
+      }
+      ss.page += 1;
+      const display = ss.category
+        ? buildCategoryPage(ss.category, ss.results, ss.page, notes)
+        : buildSearchPage(ss.results, ss.page, notes);
+      // 繼續保持 result_select 模式
+      await reply(display);
+      return;
+    }
+
+    // 數字選擇（只允許當頁範圍）
+    const num = parseInt(text, 10);
+    const pageItems = paginate(ss?.results || [], ss?.page || 1, PAGE_SIZE);
+    if (!isNaN(num) && num >= 1 && num <= pageItems.length) {
+      const key = pageItems[num - 1];
+      const note = notes[key];
+      const content = getNoteContent(note);
+      const cat = getNoteCategory(note);
+      const catEmoji = CATEGORY_EMOJI[cat] ?? '📌';
+      clearMode(userId);
+      let msg = `📋 ${catEmoji} ${cat}\n${'─'.repeat(16)}\n${content}`;
+      if (typeof note === 'object' && note.keyword) msg += `\n\n🏷️ ${note.keyword}`;
+      await reply(msg);
+      return;
+    }
+
+    // 其他一律擋掉
+    await reply('❌ 無效操作，請輸入編號或「下一頁」');
+    return;
+  }
 
   if (mode === 'category_select') {
     const CATEGORY_MAP = { '1': '工作', '2': '待辦', '3': '日記', '4': '靈感', '5': '運動', '6': '美食', '7': '其他' };
@@ -697,6 +741,7 @@ async function handleUserMessage(userId, text, replyToken) {
       return;
     }
     searchState[userId] = { keyword: selected, results, page: 1, category: selected };
+    setMode(userId, 'result_select');
     await reply(buildCategoryPage(selected, results, 1, notes));
     return;
   }
@@ -763,6 +808,7 @@ async function handleUserMessage(userId, text, replyToken) {
   }
 
   searchState[userId] = { keyword, results, page: 1 };
+  setMode(userId, 'result_select');
   await reply(buildSearchPage(results, 1, notes));
 }
 
