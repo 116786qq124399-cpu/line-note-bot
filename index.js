@@ -347,8 +347,26 @@ app.post('/webhook', express.raw({ type: '*/*' }), (req, res) => {
 // 模式處理函數
 // ════════════════════════════════════════════════
 
-// ── confirm_delete：確認刪除流程 ──
+// ── 新增記事（兩步驟）＋ 確認刪除流程 ──
 async function handleNoteMode(userId, text, reply, state, notes) {
+  if (state.step === 'waiting_content') {
+    userState[userId].tempContent = text;
+    userState[userId].step = 'waiting_keyword';
+    await reply('收到 ✍️\n\n幫這則記事取個關鍵字吧，之後用關鍵字就能快速找到它～');
+    return;
+  }
+
+  if (state.step === 'waiting_keyword') {
+    const keyword = text;
+    const category = classify(state.tempContent);
+    notes[keyword] = { content: state.tempContent, category };
+    await saveData();
+    resetState(userId);
+    const catEmoji = CATEGORY_EMOJI[category] ?? '📌';
+    await reply(`存好了 ✅\n\n🔑 ${keyword}\n📝 ${state.tempContent}\n${catEmoji} 分類：${category}\n\n${smartReply(category)}`);
+    return;
+  }
+
   if (state.step === 'confirm_delete') {
     if (text === '確認') {
       const key = state.deleteKey;
@@ -595,6 +613,12 @@ async function handleUserMessage(userId, text, replyToken) {
     return;
   }
 
+  if (text === '新增') {
+    userState[userId].step = 'waiting_content';
+    await reply('好！說吧，你想記什麼？📝');
+    return;
+  }
+
   if (text === '搜尋') {
     setMode(userId, 'search');
     userState[userId].step = 'waiting_search_keyword';
@@ -616,7 +640,7 @@ async function handleUserMessage(userId, text, replyToken) {
   // ════════════════════════════════════════════════
   const mode = getMode(userId);
 
-  if (state.step === 'confirm_delete') {
+  if (state.step === 'confirm_delete' || state.step === 'waiting_content' || state.step === 'waiting_keyword') {
     return handleNoteMode(userId, text, reply, state, notes);
   }
 
