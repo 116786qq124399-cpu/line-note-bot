@@ -67,9 +67,12 @@ function generateCode() {
 // }
 const userState = {};
 
+// tempData[userId] = { content } — 新增流程中的暫存內容
+const tempData = {};
+
 // ════════════════════════════════════════════════
 // 模式系統（userMode）
-// userMode[userId] = 'add' | 'search' | 'category' | 'category_select' | null
+// userMode[userId] = 'add_step_1' | 'add_step_2' | 'search' | 'category' | 'category_select' | null
 // ════════════════════════════════════════════════
 const userMode = {};
 
@@ -391,26 +394,8 @@ app.post('/webhook', express.raw({ type: '*/*' }), (req, res) => {
 // 模式處理函數
 // ════════════════════════════════════════════════
 
-// ── 新增記事（兩步驟）＋ 確認刪除流程 ──
+// ── 確認刪除流程 ──
 async function handleNoteMode(userId, text, reply, state, notes) {
-  if (state.step === 'waiting_content') {
-    userState[userId].tempContent = text;
-    userState[userId].step = 'waiting_keyword';
-    await reply('收到 ✍️\n\n幫這則記事取個關鍵字吧，之後用關鍵字就能快速找到它～');
-    return;
-  }
-
-  if (state.step === 'waiting_keyword') {
-    const keyword = text;
-    const category = classify(state.tempContent);
-    notes[keyword] = { content: state.tempContent, category };
-    await saveData();
-    resetState(userId);
-    const catEmoji = CATEGORY_EMOJI[category] ?? '📌';
-    await reply(`存好了 ✅\n\n🔑 ${keyword}\n📝 ${state.tempContent}\n${catEmoji} 分類：${category}\n\n${smartReply(category)}`);
-    return;
-  }
-
   if (state.step === 'confirm_delete') {
     if (text === '確認') {
       const key = state.deleteKey;
@@ -677,7 +662,7 @@ async function handleUserMessage(userId, text, replyToken) {
   }
 
   if (text === '新增') {
-    setMode(userId, 'add');
+    setMode(userId, 'add_step_1');
     await reply('請輸入要記錄的內容 📝');
     return;
   }
@@ -721,18 +706,41 @@ async function handleUserMessage(userId, text, replyToken) {
     return;
   }
 
-  if (mode === 'add') {
-    const category = classify(text);
-    const key = `記錄_${Date.now()}`;
-    notes[key] = { content: text, category };
-    await saveData();
-    clearMode(userId);
-    const catEmoji = CATEGORY_EMOJI[category] ?? '📌';
-    await reply(`✅ 已記錄（${catEmoji} ${category}）\n\n${smartReply(category)}`);
+  if (mode === 'add_step_1') {
+    tempData[userId] = { content: text };
+    setMode(userId, 'add_step_2');
+    await reply('📌 設定分類（可選）：\n\n1️⃣ 工作\n2️⃣ 待辦\n3️⃣ 日記\n4️⃣ 靈感\n5️⃣ 運動\n6️⃣ 美食\n7️⃣ 其他\n\n👉 輸入數字選分類，或輸入文字當關鍵字');
     return;
   }
 
-  if (state.step === 'confirm_delete' || state.step === 'waiting_content' || state.step === 'waiting_keyword') {
+  if (mode === 'add_step_2') {
+    const CATEGORY_MAP = { '1': '工作', '2': '待辦', '3': '日記', '4': '靈感', '5': '運動', '6': '美食', '7': '其他' };
+    const content = tempData[userId]?.content || '';
+    let category, keyword;
+
+    if (CATEGORY_MAP[text]) {
+      category = CATEGORY_MAP[text];
+      keyword = null;
+    } else {
+      keyword = text;
+      category = classify(content);
+    }
+
+    const key = `記錄_${Date.now()}`;
+    notes[key] = { content, category, ...(keyword ? { keyword } : {}) };
+    await saveData();
+    delete tempData[userId];
+    clearMode(userId);
+
+    const catEmoji = CATEGORY_EMOJI[category] ?? '📌';
+    let msg = `✅ 已記錄\n\n📝 ${content}\n📂 ${catEmoji} ${category}`;
+    if (keyword) msg += `\n🏷️ ${keyword}`;
+    msg += `\n\n${smartReply(category)}`;
+    await reply(msg);
+    return;
+  }
+
+  if (state.step === 'confirm_delete') {
     return handleNoteMode(userId, text, reply, state, notes);
   }
 
