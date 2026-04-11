@@ -69,7 +69,7 @@ const userState = {};
 
 // ════════════════════════════════════════════════
 // 模式系統（userMode）
-// userMode[userId] = 'search' | 'category' | null
+// userMode[userId] = 'add' | 'search' | 'category' | null
 // ════════════════════════════════════════════════
 const userMode = {};
 
@@ -614,8 +614,8 @@ async function handleUserMessage(userId, text, replyToken) {
   }
 
   if (text === '新增') {
-    userState[userId].step = 'waiting_content';
-    await reply('好！說吧，你想記什麼？📝');
+    setMode(userId, 'add');
+    await reply('請輸入要記錄的內容 📝');
     return;
   }
 
@@ -640,6 +640,17 @@ async function handleUserMessage(userId, text, replyToken) {
   // ════════════════════════════════════════════════
   const mode = getMode(userId);
 
+  if (mode === 'add') {
+    const category = classify(text);
+    const key = `記錄_${Date.now()}`;
+    notes[key] = { content: text, category };
+    await saveData();
+    clearMode(userId);
+    const catEmoji = CATEGORY_EMOJI[category] ?? '📌';
+    await reply(`✅ 已記錄（${catEmoji} ${category}）\n\n${smartReply(category)}`);
+    return;
+  }
+
   if (state.step === 'confirm_delete' || state.step === 'waiting_content' || state.step === 'waiting_keyword') {
     return handleNoteMode(userId, text, reply, state, notes);
   }
@@ -653,14 +664,9 @@ async function handleUserMessage(userId, text, replyToken) {
   }
 
   // ════════════════════════════════════════════════
-  // 預設：直接新增記事
+  // 預設：不儲存，提示使用方式
   // ════════════════════════════════════════════════
-  const category = classify(text);
-  const key = `記錄_${Date.now()}`;
-  notes[key] = { content: text, category };
-  await saveData();
-  const catEmoji = CATEGORY_EMOJI[category] ?? '📌';
-  await reply(`✅ 已記錄（${catEmoji} ${category}）\n\n${smartReply(category)}`);
+  await reply('輸入「新增」來記錄 📝\n輸入「搜尋」來查找 🔍\n輸入「工具箱」看所有記事 🗂️');
 }
 
 // ════════════════════════════════════════════════
