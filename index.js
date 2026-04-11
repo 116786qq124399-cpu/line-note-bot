@@ -69,7 +69,7 @@ const userState = {};
 
 // ════════════════════════════════════════════════
 // 模式系統（userMode）
-// userMode[userId] = 'note' | 'search' | 'category' | null
+// userMode[userId] = 'search' | 'category' | null
 // ════════════════════════════════════════════════
 const userMode = {};
 
@@ -347,40 +347,8 @@ app.post('/webhook', express.raw({ type: '*/*' }), (req, res) => {
 // 模式處理函數
 // ════════════════════════════════════════════════
 
-// ── 模式 note：新增 / 刪除記事流程 ──
+// ── confirm_delete：確認刪除流程 ──
 async function handleNoteMode(userId, text, reply, state, notes) {
-  // 「記一筆」：單步直接記錄，內容即筆記，自動分類
-  if (state.step === 'waiting_quick_content') {
-    const category = classify(text);
-    const key = `記錄_${Date.now()}`;
-    notes[key] = { content: text, category };
-    await saveData();
-    resetState(userId);
-    clearMode(userId);
-    const catEmoji = CATEGORY_EMOJI[category] ?? '📌';
-    await reply(`✅ 已記錄（${catEmoji} ${category}）`);
-    return;
-  }
-
-  if (state.step === 'waiting_content') {
-    userState[userId].tempContent = text;
-    userState[userId].step = 'waiting_keyword';
-    await reply('收到 ✍️\n\n幫這則記事取個關鍵字吧，之後用關鍵字就能快速找到它～');
-    return;
-  }
-
-  if (state.step === 'waiting_keyword') {
-    const keyword = text;
-    const category = classify(state.tempContent);
-    notes[keyword] = { content: state.tempContent, category };
-    await saveData();
-    resetState(userId);
-    clearMode(userId);
-    const catEmoji = CATEGORY_EMOJI[category] ?? '📌';
-    await reply(`存好了 ✅\n\n🔑 ${keyword}\n📝 ${state.tempContent}\n${catEmoji} 分類：${category}\n\n${smartReply(category)}`);
-    return;
-  }
-
   if (state.step === 'confirm_delete') {
     if (text === '確認') {
       const key = state.deleteKey;
@@ -621,23 +589,9 @@ async function handleUserMessage(userId, text, replyToken) {
   // ════════════════════════════════════════════════
   // 模式入口指令
   // ════════════════════════════════════════════════
-  if (text === '新增') {
-    setMode(userId, 'note');
-    userState[userId].step = 'waiting_content';
-    await reply('好！說吧，你想記什麼？📝');
-    return;
-  }
-
   if (text === '分類瀏覽') {
     setMode(userId, 'category');
     await reply('📂 分類瀏覽模式\n\n請輸入分類名稱：\n\n💼 工作\n💡 靈感\n📖 日記\n✅ 待辦\n📌 其他');
-    return;
-  }
-
-  if (text === '記一筆') {
-    setMode(userId, 'note');
-    userState[userId].step = 'waiting_quick_content';
-    await reply('請輸入你要記錄的內容 📝');
     return;
   }
 
@@ -662,7 +616,7 @@ async function handleUserMessage(userId, text, replyToken) {
   // ════════════════════════════════════════════════
   const mode = getMode(userId);
 
-  if (mode === 'note' || state.step === 'waiting_content' || state.step === 'waiting_keyword' || state.step === 'confirm_delete' || state.step === 'waiting_quick_content') {
+  if (state.step === 'confirm_delete') {
     return handleNoteMode(userId, text, reply, state, notes);
   }
 
@@ -675,29 +629,14 @@ async function handleUserMessage(userId, text, replyToken) {
   }
 
   // ════════════════════════════════════════════════
-  // 預設：模糊搜尋
+  // 預設：直接新增記事
   // ════════════════════════════════════════════════
-  const matched = fuzzySearch(notes, text);
-
-  if (matched.length === 0) {
-    await reply('我這邊還沒有這個紀錄 🥺\n\n要不要新增一個？輸入「新增」就可以囉～');
-  } else if (matched.length === 1) {
-    const keyword = matched[0];
-    const cat2 = getNoteCategory(notes[keyword]);
-    await reply(`📋 ${keyword}　${CATEGORY_EMOJI[cat2] ?? '📌'}${cat2}\n${'─'.repeat(16)}\n${getNoteContent(notes[keyword])}`);
-  } else {
-    const list = matched
-      .slice(0, 10)
-      .map((k, i) => `${NUMBER_EMOJI[i] ?? `${i + 1}.`} ${k}`)
-      .join('\n');
-    userState[userId] = {
-      step: 'choosing',
-      tempContent: '',
-      deleteKey: '',
-      results: matched.slice(0, 10),
-    };
-    await reply(`我幫你找到幾個相關的紀錄 👀\n\n${list}\n\n回覆數字我幫你打開 ✨`);
-  }
+  const category = classify(text);
+  const key = `記錄_${Date.now()}`;
+  notes[key] = { content: text, category };
+  await saveData();
+  const catEmoji = CATEGORY_EMOJI[category] ?? '📌';
+  await reply(`✅ 已記錄（${catEmoji} ${category}）\n\n${smartReply(category)}`);
 }
 
 // ════════════════════════════════════════════════
