@@ -172,7 +172,11 @@ function buildCategoryPage(category, results, page, notes) {
   const catEmoji = CATEGORY_EMOJI[category] ?? '📌';
 
   const list = pageItems
-    .map((k, i) => `${NUMBER_EMOJI[i] ?? `${i + 1}.`} ${k}`)
+    .map((k, i) => {
+      const content = getNoteContent(notes[k]);
+      const display = content.length > 50 ? content.slice(0, 50) + '…' : content;
+      return `${NUMBER_EMOJI[i] ?? `${i + 1}.`} ${display}`;
+    })
     .join('\n');
 
   let msg = `${catEmoji} ${category}（共 ${total} 筆，第 ${page} 頁）\n\n${list}`;
