@@ -149,8 +149,11 @@ function buildSearchPage(results, page, notes) {
 
   const list = pageItems
     .map((k, i) => {
-      const cat = getNoteCategory(notes[k]);
-      return `${NUMBER_EMOJI[i] ?? `${i + 1}.`} ${k}　${CATEGORY_EMOJI[cat] ?? '📌'}`;
+      const note = notes[k];
+      const content = getNoteContent(note);
+      const display = content.length > 50 ? content.slice(0, 50) + '…' : content;
+      const cat = getNoteCategory(note);
+      return `${NUMBER_EMOJI[i] ?? `${i + 1}.`} ${display}　${CATEGORY_EMOJI[cat] ?? '📌'}`;
     })
     .join('\n');
 
