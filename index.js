@@ -349,6 +349,19 @@ app.post('/webhook', express.raw({ type: '*/*' }), (req, res) => {
 
 // ── 模式 note：新增 / 刪除記事流程 ──
 async function handleNoteMode(userId, text, reply, state, notes) {
+  // 「記一筆」：單步直接記錄，內容即筆記，自動分類
+  if (state.step === 'waiting_quick_content') {
+    const category = classify(text);
+    const key = `記錄_${Date.now()}`;
+    notes[key] = { content: text, category };
+    await saveData();
+    resetState(userId);
+    clearMode(userId);
+    const catEmoji = CATEGORY_EMOJI[category] ?? '📌';
+    await reply(`✅ 已記錄（${catEmoji} ${category}）`);
+    return;
+  }
+
   if (state.step === 'waiting_content') {
     userState[userId].tempContent = text;
     userState[userId].step = 'waiting_keyword';
@@ -388,6 +401,30 @@ async function handleNoteMode(userId, text, reply, state, notes) {
 // ── 模式 search：進階搜尋 + 分頁 ──
 async function handleSearchMode(userId, text, reply, notes) {
   const state = userState[userId];
+
+  // 「搜尋」入口後，等待使用者輸入關鍵字
+  if (state.step === 'waiting_search_keyword') {
+    const keyword = text.trim().toLowerCase();
+    if (!keyword) {
+      await reply('請輸入要搜尋的關鍵字');
+      return;
+    }
+    const results = Object.keys(notes).filter((k) => {
+      const keyMatch = k.toLowerCase().includes(keyword);
+      const contentMatch = getNoteContent(notes[k]).toLowerCase().includes(keyword);
+      return keyMatch || contentMatch;
+    });
+    if (results.length === 0) {
+      resetState(userId);
+      clearMode(userId);
+      await reply('❌ 沒找到相關紀錄');
+      return;
+    }
+    searchState[userId] = { keyword, results, page: 1 };
+    userState[userId].step = null;
+    await reply(buildSearchPage(results, 1, notes));
+    return;
+  }
 
   // 從模糊搜尋結果選擇數字
   if (state.step === 'choosing') {
@@ -597,6 +634,20 @@ async function handleUserMessage(userId, text, replyToken) {
     return;
   }
 
+  if (text === '記一筆') {
+    setMode(userId, 'note');
+    userState[userId].step = 'waiting_quick_content';
+    await reply('請輸入你要記錄的內容 📝');
+    return;
+  }
+
+  if (text === '搜尋') {
+    setMode(userId, 'search');
+    userState[userId].step = 'waiting_search_keyword';
+    await reply('請輸入關鍵字');
+    return;
+  }
+
   if (text.startsWith('找 ') || text.startsWith('找　')) {
     setMode(userId, 'search');
     return handleSearchMode(userId, text, reply, notes);
@@ -611,11 +662,11 @@ async function handleUserMessage(userId, text, replyToken) {
   // ════════════════════════════════════════════════
   const mode = getMode(userId);
 
-  if (mode === 'note' || state.step === 'waiting_content' || state.step === 'waiting_keyword' || state.step === 'confirm_delete') {
+  if (mode === 'note' || state.step === 'waiting_content' || state.step === 'waiting_keyword' || state.step === 'confirm_delete' || state.step === 'waiting_quick_content') {
     return handleNoteMode(userId, text, reply, state, notes);
   }
 
-  if (mode === 'search' || state.step === 'choosing') {
+  if (mode === 'search' || state.step === 'choosing' || state.step === 'waiting_search_keyword') {
     return handleSearchMode(userId, text, reply, notes);
   }
 
