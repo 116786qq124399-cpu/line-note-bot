@@ -440,9 +440,14 @@ async function handleSearchMode(userId, text, reply, notes) {
       return;
     }
     const results = Object.keys(notes).filter((k) => {
-      const keyMatch = k.toLowerCase().includes(keyword);
-      const contentMatch = getNoteContent(notes[k]).toLowerCase().includes(keyword);
-      return keyMatch || contentMatch;
+      const note = notes[k];
+      const t = keyword;
+      return (
+        k.toLowerCase().includes(t) ||
+        getNoteContent(note).toLowerCase().includes(t) ||
+        getNoteCategory(note).toLowerCase().includes(t) ||
+        (typeof note === 'object' && note?.keyword?.toLowerCase().includes(t))
+      );
     });
     if (results.length === 0) {
       resetState(userId);
@@ -502,9 +507,14 @@ async function handleSearchMode(userId, text, reply, notes) {
       return;
     }
     const results = Object.keys(notes).filter((k) => {
-      const keyMatch = k.toLowerCase().includes(keyword);
-      const contentMatch = getNoteContent(notes[k]).toLowerCase().includes(keyword);
-      return keyMatch || contentMatch;
+      const note = notes[k];
+      const t = keyword;
+      return (
+        k.toLowerCase().includes(t) ||
+        getNoteContent(note).toLowerCase().includes(t) ||
+        getNoteCategory(note).toLowerCase().includes(t) ||
+        (typeof note === 'object' && note?.keyword?.toLowerCase().includes(t))
+      );
     });
     if (results.length === 0) {
       clearMode(userId);
